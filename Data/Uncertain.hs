@@ -7,7 +7,12 @@
 {-# LANGUAGE GADTs                  #-}
 
 
-module Data.Uncertain( where
+module Data.Uncertain( FinDimVecSpace(dimension)
+                     , FScalarBasisSpace
+                     , Uncertain(..)
+                     , exactly
+                     , (+/-), (+-)
+                     )  where
 
 
 import Data.Uncertain.VectorSpace
@@ -41,28 +46,53 @@ reduceEllipsoidRelevantSpan (v:vs) = vs'
                    $ zip (toList svs) (toColumns lSVD)
        vs' = map (recompose . zip basis . toList) pqd_vs'
        
-       sclCorrect = realToFrac -- . (*sqrt(fromIntegral outDim/fromIntegral inDim) )
+       sclCorrect = realToFrac . (*sqrt(fromIntegral outDim/fromIntegral inDim) )
        
        (inDim, outDim) = (length vs + 1, dimension v)
 
 
 infixl 6 +/-
 infixl 6 +-
+
+-- | 'Uncertain' values represent measurements that have either been taken
+-- on some physical system, or are result of some kind of approximate computation.
+-- On value may (and in general will) consist of multiple quantities, stored
+-- in a 'VectorSpace' container.
 data Uncertain a = Uncertain
        { expectValue :: a      -- ^ estimated / central value of the error distribution. @a@ is some /n/-dimensional vector space.
        , uncertainSpan :: [a]  -- ^ at most /n/ ortho/gon/al vectors that, with std-normal-distributed coefficients, represent the error distribution.
        }
 
 
+-- | '(+/-)' does the obvious thing: it combines an \"exact\" value with an
+-- uncertainty annotation of the same type, like in @23 +/- 2@.
 (+/-) :: FScalarBasisSpace a => a -> a -> Approximate a
 v +/- u = Approximate v [u]
+
+-- | '(+-)' adds more uncertainty-base spanning vectors. For instance, a measurement
+-- result consisting of a position /x/ with uncertainty /σx/ and a velocity /vₓ ± σvₓ/
+-- might be written @(x,v) +/- (σx,0) +- (0,σv)@, which looks sumbersome compared to
+-- simply @(x ± σx, v ± σv)@. However, this way of writing is more general: it can
+-- account for arbitrary /correlations/ between the quantities' measurement errors.
 (+-) :: FScalarBasisSpace a => Approximate a -> a -> Approximate a
 Approximate v us +- u = Approximate v (u:us)
+
 
 exactly :: FScalarBasisSpace a => a -> Approximate a
 exactly v = Approximate v []
 
 
+
+-- | The 'Num' and 'Fractional' instances of 'Uncertain' only use standard
+-- (\"Gaussian\") error propagation formulas, which is equivalent (but more
+-- CPU-efficient) to the general PCA-based propagation (e.g. @a+b@ vs.
+-- @cfmap(+) a b@ in the case of addition and subtraction, and also becomes
+-- equivalent for the other primitive operations when the uncertainties are
+-- sufficiently small.
+-- These instances can, however, not be used for more complex Functions in
+-- which variables might get used more than once, because the errors in
+-- seperate `Uncertain' values are always assumed as /independent/, which
+-- two uses of the same measured/calculated value obviously aren't.
 
 instance (RealFloat a, FScalarBasisSpace a) => Num (Approximate a) where
   
@@ -112,6 +142,10 @@ instance (Show a) => Show (Approximate a) where
     | otherwise  = showsPrec 6 v . (" +/- "++) . foldr1 (.)
                       ( intersperse (" +- "++) $ map (showsPrec 6) us )
 
+
+-- | 'Uncertain' is an instance of 'CFunctor' as well as 'CApplicative',
+-- which allows any analytical computation to be performed on uncertainSpan
+-- values and automatic uncertainty propagation to be performed.
 instance CFunctor Approximate where
   type CFunctorCtxt Approximate a = FScalarBasisSpace a
   f `cfmap` Approximate v us = Approximate v' us'
@@ -134,20 +168,3 @@ instance CApplicative Approximate where
 
 
  
-
--- data SmoothFunApproxResult a b = SmoothFunApproxResult
---        { smFunResEstimate :: Approximate b
---        , smFunContinuationDomain :: Approximate a
---        , smFunContinuation :: SmoothFunApprox a b }
--- 
--- newtype SmoothFunApprox a b = SmoothFunApprox
---        { runSmFunApprox :: a -> SmoothFunApproxResult a b }
--- 
--- instance Category SmoothFunApprox where
---   id = SmoothFunApprox (\a -> SmoothFunApproxResult
---                                 ( Approximate a Nothing )
---                                 ( Approximate a Nothing )
---                                 ( id )                    )
---   SmoothFunApprox f . SmoothFunApprox g
---      = SmoothFunApprox (\a -> SmoothFunApproxResult
---                                 ( 
