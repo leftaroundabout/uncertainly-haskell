@@ -4,18 +4,19 @@
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE UndecidableInstances   #-}
-{-# LANGUAGE GADTs                  #-}
 
 
-module Data.Uncertain( FinDimVecSpace(dimension)
-                     , FScalarBasisSpace
-                     , Uncertain(..)
+module Data.Uncertain( FScalarBasisSpace
+                     , Approximate(..)
                      , exactly
                      , (+/-), (+-)
                      )  where
 
 
 import Data.Uncertain.VectorSpace
+
+import Data.Packed.Matrix
+import Numeric.LinearAlgebra
 
 
 import Control.Functor.Constrained 
@@ -28,37 +29,15 @@ import Data.List
 
 
 
--- | General uncertainty propagation, combining propagated "unit errors", by means 
--- of a left singular value decomposition, to a resultant set of basis errors.
--- It's essentially principal component analysis.
-reduceEllipsoidRelevantSpan :: forall a. FScalarBasisSpace a => [a] -> [a]
-reduceEllipsoidRelevantSpan [] = []
-reduceEllipsoidRelevantSpan (v:vs) = vs'
- where vDecomp :: [Scalar a]  
-       (basis,vDecomp) = unzip $ decompose v
-       decomps :: [[Scalar a]]
-       decomps = vDecomp : map( (`map`basis) . decompose' ) vs
-       lSVD :: Matrix (Scalar a)
-       (lSVD, svs) = leftSV . (length basis >< inDim)
-                       . concat $ transpose decomps
-       pqd_vs' :: [Vector (Scalar a)]
-       pqd_vs' = map (uncurry $ scale . sclCorrect) . filter ((>0) . fst)
-                   $ zip (toList svs) (toColumns lSVD)
-       vs' = map (recompose . zip basis . toList) pqd_vs'
-       
-       sclCorrect = realToFrac . (*sqrt(fromIntegral outDim/fromIntegral inDim) )
-       
-       (inDim, outDim) = (length vs + 1, dimension v)
-
 
 infixl 6 +/-
 infixl 6 +-
 
--- | 'Uncertain' values represent measurements that have either been taken
+-- | 'Approximate' values represent measurements that have either been taken
 -- on some physical system, or are result of some kind of approximate computation.
 -- On value may (and in general will) consist of multiple quantities, stored
 -- in a 'VectorSpace' container.
-data Uncertain a = Uncertain
+data Approximate a = Approximate
        { expectValue :: a      -- ^ estimated / central value of the error distribution. @a@ is some /n/-dimensional vector space.
        , uncertainSpan :: [a]  -- ^ at most /n/ ortho/gon/al vectors that, with std-normal-distributed coefficients, represent the error distribution.
        }
@@ -143,14 +122,39 @@ instance (Show a) => Show (Approximate a) where
                       ( intersperse (" +- "++) $ map (showsPrec 6) us )
 
 
+
+
+-- | General uncertainty propagation, combining propagated "unit errors", by means 
+-- of a left singular value decomposition, to a resultant set of basis errors.
+-- It's essentially principal component analysis.
+reduceEllipsoidRelevantSpan :: forall a. FScalarBasisSpace a => [a] -> [a]
+reduceEllipsoidRelevantSpan [] = []
+reduceEllipsoidRelevantSpan (v:vs) = vs'
+ where vDecomp :: [Scalar a]  
+       (basis,vDecomp) = unzip $ decompose v
+       decomps :: [[Scalar a]]
+       decomps = vDecomp : map( (`map`basis) . decompose' ) vs
+       lSVD :: Matrix (Scalar a)
+       (lSVD, svs) = leftSV . (length basis >< inDim)
+                       . concat $ transpose decomps
+       pqd_vs' :: [Vector (Scalar a)]
+       pqd_vs' = map (uncurry $ scale . sclCorrect) . filter ((>0) . fst)
+                   $ zip (toList svs) (toColumns lSVD)
+       vs' = map (recompose . zip basis . toList) pqd_vs'
+       
+       sclCorrect = realToFrac
+       
+       inDim = length vs + 1
+
+
 -- | 'Uncertain' is an instance of 'CFunctor' as well as 'CApplicative',
--- which allows any analytical computation to be performed on uncertainSpan
+-- which allows any analytical computation to be performed on uncertain
 -- values and automatic uncertainty propagation to be performed.
 instance CFunctor Approximate where
   type CFunctorCtxt Approximate a = FScalarBasisSpace a
   f `cfmap` Approximate v us = Approximate v' us'
    where v' = f v
-         us' = reduceEllipsoidRelevantSpan
+         us' = map(^/sqrt(2)) . reduceEllipsoidRelevantSpan
               . map ((v' ^-^) . f) $ [(v ^-^), (v ^+^)] <*> us
 
 instance CApplicative Approximate where
@@ -158,8 +162,8 @@ instance CApplicative Approximate where
   cpure = exactly
   cliftA2 ifx (Approximate a uas) (Approximate b ubs) = Approximate v uvs
    where v = a `ifx` b
-         uvs = map(^/sqrt(2)) $ reduceEllipsoidRelevantSpan devs
-         devs = map (v ^-^) =<<
+         uvs = map(^/sqrt(2)) . reduceEllipsoidRelevantSpan 
+              $ map (v ^-^) =<<
                       [ map (`ifx` b)
                            ([(a ^-^), (a ^+^)] <*> uas)
                       , map (a `ifx`)
