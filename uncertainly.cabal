@@ -1,0 +1,23 @@
+Name:                uncertainly
+Version:             0.1
+Category:            media
+Synopsis:            Uncertainty propagation of values such as physical measurements or approximate computations
+Description:         A library for dealing with values that are known not exactly but
+                     only to some roughly known precision, because obtaining the exact value is
+                     impossible or at least infeasible and perhaps not necessary.
+                     It is nontrivial to see how the errors in such quantities propagate through
+                     further computations; this library provides a functor interface that
+                     allows \"embedding\" of any such computations into the uncertainty-range.
+License:             GPL-3
+License-file:        COPYING
+Author:              Justus Sagemüller
+Maintainer:          (@) sagemuej $ smail.uni-koeln.de
+Build-Type:          Simple
+Cabal-Version:       >=1.2
+
+Library
+  Build-Depends:     base>=4.5
+                     , vector-space>=0.8
+                     , hmatrix
+                     , constrained-categories
+  Exposed-modules:   Data.Uncertain Data.Uncertain.VectorSpace
