@@ -9,7 +9,7 @@
 module Data.Uncertain( FScalarBasisSpace
                      , Approximate(..)
                      , exactly
-                     , (+/-), (+-)
+                     , (+/-), (±), (+-)
                      )  where
 
 
@@ -30,9 +30,6 @@ import Data.List
 
 
 
-infixl 6 +/-
-infixl 6 +-
-
 -- | 'Approximate' values represent measurements that have either been taken
 -- on some physical system, or are result of some kind of approximate computation.
 -- On value may (and in general will) consist of multiple quantities, stored
@@ -43,15 +40,21 @@ data Approximate a = Approximate
        }
 
 
--- | '(+/-)' does the obvious thing: it combines an \"exact\" value with an
--- uncertainty annotation of the same type, like in @23 +/- 2@.
+infixl 6 +/-   -- like '+'
+infixl 6 +-
+
+-- | The equivalent '(+/-)' and '(±)' do the obvious thing: combining an \"exact\" value
+-- with an uncertainty annotation of the same type, like in @23 +/- 2@.
 (+/-) :: FScalarBasisSpace a => a -> a -> Approximate a
 v +/- u = Approximate v [u]
 
+(±) :: FScalarBasisSpace a => a -> a -> Approximate a
+v ± u = Approximate v [u]
+
 -- | '(+-)' adds more uncertainty-base spanning vectors. For instance, a measurement
 -- result consisting of a position /x/ with uncertainty /σx/ and a velocity /vₓ ± σvₓ/
--- might be written @(x,v) +/- (σx,0) +- (0,σv)@, which looks sumbersome compared to
--- simply @(x ± σx, v ± σv)@. However, this way of writing is more general: it can
+-- might be written @(x,v) ± (σx,0)+-(0,σv)@, which looks admittedly cumbersome compared
+-- to simply @(x ± σx, v ± σv)@. However, this way of writing is more general: it can
 -- account for arbitrary /correlations/ between the quantities' measurement errors.
 (+-) :: FScalarBasisSpace a => Approximate a -> a -> Approximate a
 Approximate v us +- u = Approximate v (u:us)
@@ -127,6 +130,10 @@ instance (Show a) => Show (Approximate a) where
 -- | General uncertainty propagation, combining propagated "unit errors", by means 
 -- of a left singular value decomposition, to a resultant set of basis errors.
 -- It's essentially principal component analysis.
+-- 
+-- Disclaimer: this method has not yet been thoroughly tested; it does work for
+-- simple examples but should still be tested for complicated multi-dimensional
+-- error propagation problems by comparing to a monte-carlo simulation.
 reduceEllipsoidRelevantSpan :: forall a. FScalarBasisSpace a => [a] -> [a]
 reduceEllipsoidRelevantSpan [] = []
 reduceEllipsoidRelevantSpan (v:vs) = vs'
