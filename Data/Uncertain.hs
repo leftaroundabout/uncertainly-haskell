@@ -65,7 +65,7 @@ exactly v = Approximate v []
 
 
 
--- | The 'Num' and 'Fractional' instances of 'Uncertain' only use standard
+-- | The 'Num' and 'Fractional' instances of 'Approximate' only use standard
 -- (\"Gaussian\") error propagation formulas, which is equivalent (but more
 -- CPU-efficient) to the general PCA-based propagation (e.g. @a+b@ vs.
 -- @cfmap(+) a b@ in the case of addition and subtraction, and also becomes
@@ -73,7 +73,7 @@ exactly v = Approximate v []
 -- sufficiently small.
 -- These instances can, however, not be used for more complex Functions in
 -- which variables might get used more than once, because the errors in
--- seperate `Uncertain' values are always assumed as /independent/, which
+-- seperate `Approximate' values are always assumed as /independent/, which
 -- two uses of the same measured/calculated value obviously aren't.
 
 instance (RealFloat a, FScalarBasisSpace a) => Num (Approximate a) where
@@ -154,7 +154,7 @@ reduceEllipsoidRelevantSpan (v:vs) = vs'
        inDim = length vs + 1
 
 
--- | 'Uncertain' is an instance of 'CFunctor' as well as 'CApplicative',
+-- | 'Approximate' is an instance of 'CFunctor' as well as 'CApplicative',
 -- which allows any analytical computation to be performed on uncertain
 -- values and automatic uncertainty propagation to be performed.
 instance CFunctor Approximate where
